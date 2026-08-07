@@ -1,0 +1,142 @@
+%=======================================================================
+%  Biomedical Data Processing - final project (retake)
+%  Written report
+%=======================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+
+% ---- typography -------------------------------------------------------
+% Times for text and maths, Helvetica for headings and captions: the classic
+% journal combination, and both ship with every LaTeX distribution.
+\usepackage{mathptmx}
+\usepackage[scaled=0.90]{helvet}
+\usepackage{courier}
+\usepackage{microtype}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+
+\graphicspath{{figures/}}
+\setlist{itemsep=3pt,topsep=4pt,parsep=0pt}
+
+\captionsetup{font=small,labelfont={bf,sf},textfont=rm,width=0.92\textwidth}
+\titleformat{\section}{\normalfont\sffamily\large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalfont\sffamily\bfseries}{\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}{\normalfont\sffamily\small\bfseries}{\thesubsubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{5pt}
+\titlespacing*{\subsubsection}{0pt}{10pt}{4pt}
+
+% Units, defined locally so the document does not depend on a particular
+% siunitx version (v2 and v3 use incompatible command names).
+\newcommand{\hertz}{Hz}
+\newcommand{\second}{s}
+\newcommand{\volt}{V}
+\newcommand{\decibel}{dB}
+\newcommand{\percent}{\%}
+\newcommand{\milli}{m}
+\newcommand{\micro}{\ensuremath{\mu}}
+\newcommand{\uV}{\ensuremath{\mu}V}
+\newcommand{\num}[1]{#1}
+\newcommand{\SI}[2]{#1\,#2}
+\newcommand{\SIrange}[3]{#1--#2\,#3}
+
+\title{\vspace{-1.2cm}\sffamily\bfseries Biomedical Data Processing:
+       final project report\\[4pt]
+       \large\mdseries ECG-based identification and EEG-based sleep staging}
+\author{\normalsize Teodora Taleska}
+\date{\normalsize August 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+%=======================================================================
+\section{Part I: ECG-based identification}
+%=======================================================================
+
+The aim of this part is to recover, without supervision, which of five subjects produced each
+heartbeat in a single continuous ECG recording. The pipeline has six stages: R-peak detection
+with Pan-Tompkins, Wiener filtering (a PQRST model as the desired signal, the inter-beat
+intervals as the noise), segmentation into one-beat windows, wavelet decomposition, $K$-means
+clustering into five groups, and PCA followed by re-clustering to measure the cost of the
+compression. The ground-truth labels are never used inside this chain, only to score the
+finished partition, and since $K$-means numbers its clusters arbitrarily, the labelling is
+resolved afterwards by searching over all permutations of the five indices.
+
+%-----------------------------------------------------------------------
+\subsection{Data exploration}
+%-----------------------------------------------------------------------
+
+The recording is a single ECG channel sampled at \SI{200}{\hertz}, \SI{605}{\second} long, 121006 samples, and contains the heartbeats of five subjects who touch the sensor in turn, one beat at a time.
+Figure~\ref{fig:raw} shows a \SI{20}{\second} window of the unfiltered signal.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{p1_raw_20s.pdf}
+  \caption{Twenty seconds of the raw, unfiltered ECG recording (\SIrange{52.2}{72.2}{\second}).
+           The window contains 22 beats, an average rate of about \SI{66}{bpm}, and all five
+           subjects contribute to it.}
+  \label{fig:raw}
+\end{figure}
+
+\textbf{Which noise sources are present, and why?} Three sources are visible directly on this
+plot.
+
+\begin{description}[leftmargin=1.6em,style=nextline]
+
+\item[Baseline wander.] The isoelectric line drifts between roughly \SI{1210}{\uV} and
+\SI{1550}{\uV}, a swing of \SI{340}{\uV}, far too slow to be cardiac activity. It tracks the
+electrode-skin contact, which changes with each subject: the deep dip to \SI{757}{\uV} near
+$t=\SI{17}{\second}$ coincides with a subject change and has no PQRST shape.
+
+\item[Powerline interference.] A regular ripple of constant amplitude is present everywhere,
+including the flat segments between beats where the heart contributes nothing. Isolated around
+\SI{50}{\hertz} it has an rms of \SI{27.9}{\uV} and a peak-to-peak amplitude of about
+\SI{104}{\uV}; its periodicity and its indifference to whether a beat is present identify it as
+mains interference rather than biology.
+
+\item[Broadband muscle and contact noise.] An irregular, burst-like fuzz sits on top of the
+ripple, best seen on the flat segments. The residual above \SI{60}{\hertz}, well outside the
+ECG band, has an rms of \SI{14.9}{\uV} and is non-periodic with intensity that varies over
+time, consistent with muscle contractions and electrode micro-movement.
+
+\end{description}
+
+\subsubsection{Confirmation in the frequency domain}
+
+As an optional addition I estimated the power spectral density of the whole recording with
+Welch's method (Hann window, \num{4096} samples, \SI{50}{\percent} overlap) to confirm the
+three sources quantitatively. Figure~\ref{fig:rawpsd} shows the result.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.80\textwidth]{p1_raw_psd.pdf}
+  \caption{Welch power spectral density of the complete raw recording.}
+  \label{fig:rawpsd}
+\end{figure}
+
+The band below \SI{0.7}{\hertz} carries \SI{22.3}{\percent} of the total power, confirming the
+baseline wander as the dominant disturbance. A narrow line stands \SI{15.1}{\decibel} above the
+floor at exactly \SI{50}{\hertz} with no line at \SI{60}{\hertz} and no harmonic at
+\SI{100}{\hertz}, confirming a clean mains tone. Above \SI{60}{\hertz}, well past where the ECG
+itself carries content, the floor stays elevated, confirming the broadband muscle and contact
+noise. The three contributions occupy fixed bands and do not change character along the record,
+so the noise is stationary, which is what justifies the single, time-invariant Wiener filter of
+Section~\ref{sec:wiener}.
+
+\subsection{Wiener filter}
+\label{sec:wiener}
+
+\emph{To be written.}
+
+\end{document}
