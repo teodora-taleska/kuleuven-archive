@@ -114,18 +114,18 @@ subject and does not have the shape of a PQRST complex.
 %time, consistent with muscle contractions and electrode micro-movement.
 \end{description}
 
-\subsubsection{Confirmation in the frequency domain}
-
-As an optional addition I estimated the power spectral density of the whole recording with
-Welch's method (Hann window, \num{4096} samples, \SI{50}{\percent} overlap) to confirm the
-three sources quantitatively. Figure~\ref{fig:rawpsd} shows the result.
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.80\textwidth]{p1_raw_psd.pdf}
-  \caption{Welch power spectral density of the complete raw recording.}
-  \label{fig:rawpsd}
-\end{figure}
+%\subsubsection{Confirmation in the frequency domain}
+%
+%As an optional addition I estimated the power spectral density of the whole recording with
+%Welch's method (Hann window, \num{4096} samples, \SI{50}{\percent} overlap) to confirm the
+%three sources quantitatively. Figure~\ref{fig:rawpsd} shows the result.
+%
+%\begin{figure}[htbp]
+%  \centering
+%  \includegraphics[width=0.80\textwidth]{p1_raw_psd.pdf}
+%  \caption{Welch power spectral density of the complete raw recording.}
+%  \label{fig:rawpsd}
+%\end{figure}
 
 %
 %The band below \SI{0.7}{\hertz} carries \SI{22.3}{\percent} of the total power, confirming the
@@ -535,5 +535,91 @@ most informative ones. Not after: PCA already orders the kept components by how 
 they explain on the normalised input, so re-normalising afterwards would force components that
 are not equally informative to contribute equally to any distance computed on them, undoing
 that ordering rather than preserving it.
+
+%=======================================================================
+\section{Part II: EEG-based sleep staging}
+%=======================================================================
+
+This part classifies \SI{30}{\second} epochs of a polysomnography (PSG) recording into one of
+five sleep stages (Wake, N1, N2, N3, REM) from four channels: two EEG derivations (Fpz-Cz,
+Pz-Oz), an EOG reference and an EMG reference. Twenty subjects are provided, split into fifteen
+for training and five held out for testing, and each subject's recording is already cut into
+consecutive \num{3000}-sample epochs (\SI{100}{\hertz} for \SI{30}{\second}) with one
+ground-truth stage label per epoch.
+
+%-----------------------------------------------------------------------
+\subsection{Data preparation}
+%-----------------------------------------------------------------------
+
+This first subsection groups the tasks that come before any feature is extracted: loading the
+recordings, visualising a single epoch, and removing EOG/EMG artefacts with ICA.
+
+\subsubsection{Visualising a single epoch}
+
+\texttt{plot\_epoch} plots the four channels of one epoch stacked on a shared \SI{30}{\second}
+time axis. One epoch of each stage is located and plotted for subject 6: epoch 5 (Wake), epoch
+64 (N1), epoch 74 (N2), epoch 173 (N3) and epoch 255 (REM), giving one concrete example of each
+stage to discuss.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{p2_epoch_n2.pdf}
+  \caption{Subject 6, epoch 74, an N2 epoch: Fpz-Cz, Pz-Oz, EOG and EMG, top to bottom.}
+  \label{fig:epochn2}
+\end{figure}
+
+\textbf{Q: What visible patterns characterise each sleep stage?}
+
+\begin{description}[leftmargin=1.6em,style=nextline]
+
+\item[Wake (subject 6, epoch 5).] The EEG channels show fast, low-amplitude activity, consistent
+with an active brain. The EOG shows small eye movements, and the EMG sits at a comparatively
+higher, more active level than in any of the sleep stages below.
+
+\item[N1 (subject 6, epoch 64).] The lightest sleep stage: the EEG slows down and amplitude
+stays low, without a single strong visual marker the way the later stages have. The EOG shows
+slow, rolling eye movements, and the EMG starts to relax relative to wake.
+
+\item[N2 (subject 6, epoch 74, Figure~\ref{fig:epochn2}).] The stage with the clearest visual
+markers of all five: short bursts of faster oscillation standing out against a calmer
+background (sleep spindles), and isolated sharp, high-amplitude deflections that stand out from
+the surrounding waveform (K-complexes). Both are best looked for in the two EEG channels at the
+top of Figure~\ref{fig:epochn2}, a spindle reads as a brief burst rather than a single sharp
+peak, a K-complex as one isolated large deflection rather than a repeating pattern. The EOG is
+calm and the EMG lower than in N1.
+
+\item[N3 (subject 6, epoch 173).] Deep sleep: the EEG is dominated by high-amplitude,
+low-frequency waves, slower than anything in the stages above. The EOG is quiet and the EMG is
+at its lowest of the four non-REM stages.
+
+\item[REM (subject 6, epoch 255).] The EEG returns to a mixed, comparatively low-amplitude
+pattern that looks closer to N1 or wake than to N2 or N3, which is why the reference channels
+matter here: the EOG shows the rapid eye movements that give the stage its name, while the EMG
+drops to its lowest level of all five stages, consistent with the muscle atonia of REM sleep.
+
+\end{description}
+
+\subsubsection{Removal of EOG/EMG artefacts from EEG}
+
+A FastICA model is fit on the training subjects (subjects 0--14) so that the two reference
+channels, EOG and EMG, can later be used to identify and remove the independent components they
+are associated with, leaving cleaner Fpz-Cz and Pz-Oz channels for feature extraction.
+
+\textbf{Q: How should you reshape the data properly?} Each subject's array has shape
+(epochs, channels, samples), with 4 channels and \num{3000} samples per epoch
+(\SI{30}{\second} at \SI{100}{\hertz}), but scikit-learn's \texttt{FastICA} expects
+samples-by-channels. The channel and sample axes are swapped first, so each epoch becomes
+(samples, channels), and the epoch and sample axes are then merged into one, so every
+\num{3000}-sample epoch contributes \num{3000} rows to a single (samples, 4) array. Doing this
+for all 15 training subjects and stacking them gives a training set of shape
+\texttt{(47280000, 4)}.
+
+\textbf{Q: Which data were concatenated, and what is the final training shape?} All epochs of
+subjects 0--14 are reshaped this way and stacked with \texttt{np.vstack}, giving the
+\texttt{(47280000, 4)} array above as the data \texttt{FastICA} is fit on. The model itself is
+built with 4 components (one per channel), \texttt{whiten='unit-variance'}, and a fixed
+\texttt{random\_state}: FastICA starts from a random unmixing matrix and the sign and ordering of
+the recovered components are not otherwise identified by the model, so fixing the seed is what
+makes the same four components come out on every run.
 
 \end{document}
