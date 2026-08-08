@@ -78,7 +78,7 @@ resolved afterwards by searching over all permutations of the five indices.
 \label{sec:dataexpl}
 %-----------------------------------------------------------------------
 
-The recording is a single ECG channel sampled at \SI{200}{\hertz}, \SI{605}{\second} long, 121006 samples, and contains the heartbeats of five subjects who touch the sensor in turn, one beat at a time.
+The recording is a single ECG channel sampled at \SI{200}{\hertz}, 121006 samples, and contains the heartbeats of five subjects who touch the sensor in turn, one beat at a time.
 Figure~\ref{fig:raw} shows a \SI{20}{\second} window of the unfiltered signal.
 
 \begin{figure}[htbp]
@@ -88,19 +88,19 @@ Figure~\ref{fig:raw} shows a \SI{20}{\second} window of the unfiltered signal.
            with beats from several of the five subjects visible in turn.}
   \label{fig:raw}
 \end{figure}
-\textbf{Q: Which noise sources are present, and why?} Three sources are visible directly on this
+\textbf{Q: Which noise sources are present, and why?} Three sources are visible on this
 plot.
 
 \begin{description}[leftmargin=1.6em,style=nextline]
 
-\item[Baseline wander.] The isoelectric line drifts slowly up and down across the window instead
+\item[Baseline wander.] The line drifts slowly up and down across the window instead
 of staying flat, far too slow to be cardiac activity. It tracks the electrode-skin contact,
 which changes with each subject: the clearest dip in the window coincides with a change of
 subject and does not have the shape of a PQRST complex.
 
 \item[Powerline interference.] A regular ripple with a fairly constant amplitude is visible throughout the signal, including the flat segments between heartbeats where no cardiac activity is expected. Its periodic nature and consistent appearance suggest that it originates from electrical mains interference rather than the ECG itself.
 
-\item[Broadband muscle and contact noise.] In addition to the periodic ripple, small irregular fluctuations can be observed superimposed on the ECG signal, particularly in the flatter regions between heartbeats. These non-periodic variations are consistent with muscle activity, electrode movement, or other measurement-related noise.
+\item[Broadband muscle and contact noise.] In addition to the periodic ripple, small irregular fluctuations can be observed on the signal, particularly in the flatter regions between heartbeats. These non-periodic variations are consistent with muscle activity, electrode movement, or other measurement-related noise.
 
 %\item[Powerline interference.] A regular ripple of constant amplitude is present everywhere,
 %including the flat segments between beats where the heart contributes nothing. Isolated around
@@ -159,7 +159,7 @@ its own average, while a QRS complex produces a burst of energy well above that 
 thresholding at the mean separates the two without needing a value tuned to this particular
 recording's amplitude scale. The minimum spacing enforced between accepted peaks is set to
 \SI{250}{\milli\second}, a \SI{240}{bpm} ceiling, as noted in the code comment next to it. This
-sits safely above any physiologically plausible heart rate, so it can never suppress two
+sits safely above any physiologically realistic heart rate, so it can never suppress two
 genuinely consecutive beats, while still being wide enough to span the \SI{150}{\milli\second}
 moving-window integration, which is what stops the integrated bump from a single beat from being
 picked up as two separate peaks.
@@ -192,11 +192,13 @@ avoids having to filter \num{121\,006} samples in one block.
 (\SI{0.7}{\second}). The filter length is set to $L=\num{512}$ samples (\SI{2.56}{\second}),
 about \num{3.7} times the template length, which leaves enough zero-padding to resolve the
 periodogram of $S_d$ at a fine frequency resolution ($\mathrm{d}f = f_s/L \approx
-\SI{0.39}{\hertz}$) without truncating any of the template's spectral content. The same $L$ sets
-the WOLA analysis window, so each window also spans several beats, given that Pan-Tompkins finds
-\num{679} beats over the \SI{605}{\second} recording, an average rate of about \SI{67}{bpm}.
-This is consistent with a filter that is designed once from global, time-invariant statistics
-rather than adapted window by window.
+\SI{0.39}{\hertz}$) without truncating any of the template's spectral content.
+
+%The same $L$ sets
+%the WOLA analysis window, so each window also spans several beats, given that Pan-Tompkins finds
+%\num{679} beats over the \SI{605}{\second} recording, an average rate of about \SI{67}{bpm}.
+%This is consistent with a filter that is designed once from global, time-invariant statistics
+%rather than adapted window by window.
 
 \begin{figure}[htbp]
   \centering
@@ -206,16 +208,12 @@ rather than adapted window by window.
   \label{fig:wienerpsd}
 \end{figure}
 
-Figure~\ref{fig:wienerpsd} connects directly to the noise sources identified in
-Section~\ref{sec:dataexpl}. At \SI{0}{\hertz} the filter is essentially zero: demeaning forces
-$S_d(0)=0$ by construction, while $S_n(0)$ stays large because the noise segments still carry
-the low-frequency baseline wander identified earlier, so the filter rejects the
-near-zero-frequency band where that wander sits. In the band where the ECG carries most of its
-energy, $S_d$ dominates $S_n$ and the filter stays close to unity gain, which by the definition
-$W(f)=S_d/(S_d+S_n)$ can never exceed \SI{0}{\decibel}. At exactly \SI{50}{\hertz} the filter
-dips sharply, matching the mains line identified before, and it rolls off further at higher
-frequencies, attenuating the same broadband range where the raw PSD showed elevated muscle and
-contact noise.
+Figure~\ref{fig:wienerpsd} tracks the three noise sources identified in identified in Section~\ref{sec:dataexpl}.
+It is near zero at \SI{0}{\hertz}, where demeaning forces $S_d(0)=0$ while $S_n(0)$ still
+carries the baseline wander; it stays close to unity gain across the band where the ECG carries
+most of its energy, since $W(f)=S_d/(S_d+S_n)$ can never exceed \SI{0}{\decibel}; and it dips
+sharply at exactly \SI{50}{\hertz} and rolls off further above it, suppressing the mains line
+and the broadband muscle/contact noise identified earlier.
 
 \textbf{Q: After filtering, recompute the R-peak locations. Do you get the same number of
 R-peaks? Why (not)?}
@@ -273,11 +271,12 @@ averaging over overlapping segments is what reduces the variance of the estimate
 periodogram of a random signal has a relative standard deviation of about \SI{100}{\percent}
 regardless of record length. $S_d$ is estimated differently, as the periodogram of the
 zero-padded template rather than with Welch, since $d$ is a single deterministic transient
-rather than a stationary process and averaging sub-windows of it would smear its spectrum
-instead of resolving it.
+rather than a stationary process and averaging sub-windows of it would
+broaden its spectrum instead of resolving it.
 
-\textbf{Q: Do you see any edge effects after filtering? Why (not)?} A small one is plausible at
-the very start and end of the recording. The \texttt{wola\_filt} function reconstructs the
+\textbf{Q: Do you see any edge effects after filtering? Why (not)?}
+A small edge effect can be observed at the very beginning and end of the recording, which is expected due to boundary effects introduced by the filtering process.
+The \texttt{wola\_filt} function reconstructs the
 filtered signal from overlapping analysis windows and explicitly zero-pads the result whenever
 the reconstruction falls short of the input length; the first and last windows also lack a
 neighbour to overlap with on one side. Both are boundary artefacts of the overlap-add procedure
@@ -312,13 +311,14 @@ Subject & Count & Percentage (\%) \\
 \end{table}
 
 The five subjects are not represented equally: subject 5 contributes the most segments and
-subject 3 the fewest.
+subject 3 the fewest. I additionally overlaid all
+five averages on one set of axes, shown in Figure~\ref{fig:avgoverlay}.
 
-The assignment asks for the five average segments plotted separately with equally scaled axes,
-which is satisfied by fixing the same $y$-limits on all five. I additionally overlaid all five
-averages on one set of axes, shown in Figure~\ref{fig:avgoverlay}, since the shared axes already
-make them directly comparable and a single plot makes the comparison easier to read than five
-separate ones side by side.
+%The assignment asks for the five average segments plotted separately with equally scaled axes,
+%which is satisfied by fixing the same $y$-limits on all five. I additionally overlaid all five
+%averages on one set of axes, shown in Figure~\ref{fig:avgoverlay}, since the shared axes already
+%make them directly comparable and a single plot makes the comparison easier to read than five
+%separate ones side by side.
 
 \begin{figure}[htbp]
   \centering
@@ -327,12 +327,12 @@ separate ones side by side.
   \label{fig:avgoverlay}
 \end{figure}
 
-Subject 3 stands out from the other four: its R-peak is noticeably higher, and where the other
-subjects settle into a positive bump after the R-peak, subject 3's average stays negative over
-that same stretch. This lines up with the assignment's own background on the data, which states
-that subject 3, unlike the other four, has valvular heart disease, a condition that affects how
-the heart's chambers fill and contract and would be expected to change the shape of the
-electrical signal relative to a healthy beat.
+%Subject 3 stands out from the other four: its R-peak is noticeably higher, and where the other
+%subjects settle into a positive bump after the R-peak, subject 3's average stays negative over
+%that same stretch. This lines up with the assignment's own background on the data, which states
+%that subject 3, unlike the other four, has valvular heart disease, a condition that affects how
+%the heart's chambers fill and contract and would be expected to change the shape of the
+%electrical signal relative to a healthy beat.
 
 \subsubsection{Additional questions}
 
@@ -414,16 +414,11 @@ since $K$-means itself has no notion of which cluster index corresponds to which
   \label{fig:kmeans2d}
 \end{figure}
 
-Accuracy after matching is \num{0.420}; the confusion matrix is shown alongside the
-post-reduction one for comparison in Section~1.6. Subject 3 is recovered
-almost perfectly, \num{38} of its \num{40} segments are correctly assigned, matching
-Figure~\ref{fig:kmeans2d}, where the green cluster sits apart from the rest. Subjects 1, 2 and 5
-are the opposite case: their rows are spread across several columns rather than concentrated on
-the diagonal, because in this two-coefficient space they occupy the same overlapping region
-(visible already in the ground-truth panel). $K$-means still partitions that region into three
-clusters, since it always assigns every point to its nearest centroid regardless of whether the
-underlying classes are actually separable there, so the boundaries it draws through the overlap
-are essentially arbitrary with respect to the true subject identity.
+
+
+Accuracy after matching is \num{0.420}: subject 3 is recovered almost perfectly, matching the well-separated green cluster in Figure~\ref{fig:kmeans2d}, while subjects 1, 2 and 5 spread across several columns instead of concentrating on the diagonal because they occupy the same overlapping region in this two-coefficient space, where
+K-means still draws three arbitrary boundaries since it assigns every point to its nearest centroid regardless of whether the classes are actually separable there; the confusion matrix is shown alongside the post-reduction one for comparison in Section~1.6.
+
 
 \textbf{Q: Did you normalise the wavelet coefficients before classification (without
 dimensionality reduction)?} Yes. Both coefficients are z-scored with \texttt{StandardScaler}
@@ -454,8 +449,7 @@ what makes the accuracy and confusion matrix above meaningful.
 \textbf{Q: Is it a good idea to normalise the wavelets before classification? Why (not)?} Yes,
 as a general rule, since $K$-means clusters purely by Euclidean distance, a coefficient with a
 larger numerical range would automatically carry more weight in that distance than a more
-informative coefficient on a smaller scale, for reasons that have nothing to do with which one
-actually separates the subjects.
+informative coefficient on a smaller scale.
 
 \textbf{Q: How do you decide which wavelet values are the most relevant to model the ECG
 segments? Why?} As in Section~1.4, relevance is measured as variance across the \num{676}
@@ -584,8 +578,7 @@ slow, rolling eye movements, and the EMG starts to relax relative to wake.
 markers of all five: short bursts of faster oscillation standing out against a calmer
 background (sleep spindles), and isolated sharp, high-amplitude deflections that stand out from
 the surrounding waveform (K-complexes). Both are best looked for in the two EEG channels at the
-top of Figure~\ref{fig:epochn2}, a spindle reads as a brief burst rather than a single sharp
-peak, a K-complex as one isolated large deflection rather than a repeating pattern. The EOG is
+top of Figure~\ref{fig:epochn2}. The EOG is
 calm and the EMG lower than in N1.
 
 \item[N3 (subject 6, epoch 173).] Deep sleep: the EEG is dominated by high-amplitude,
@@ -621,5 +614,316 @@ built with 4 components (one per channel), \texttt{whiten='unit-variance'}, and 
 \texttt{random\_state}: FastICA starts from a random unmixing matrix and the sign and ordering of
 the recovered components are not otherwise identified by the model, so fixing the seed is what
 makes the same four components come out on every run.
+
+\paragraph{Visual inspection of ICA components.} For the same subject and epoch used earlier
+(subject 6, epoch 5, Figure~\ref{fig:epochn2}), the epoch is reshaped from (4, 3000) to
+(3000, 4) with a transpose so it matches the layout \texttt{ica.transform} expects, transformed
+into its four independent components, and transposed back to (4, 3000) so each component can be
+plotted as its own row against time. Figure~\ref{fig:icacomponents} shows the four components
+next to the original EOG and EMG channels.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.65\textwidth]{p2_ica_components.pdf}
+  \caption{Original EOG and EMG channels (top two rows) alongside the four ICA components,
+           subject 6, epoch 5.}
+  \label{fig:icacomponents}
+\end{figure}
+
+\textbf{Q: Identify which components are likely EOG-related and which are EMG-related. Provide
+a short rationale for each identification.} Component 2 tracks the original EOG channel closely:
+both show the same slow, large deflections at roughly the same points in the epoch, and
+component 2's amplitude is an order of magnitude above the other three ($10^7$ against $10^6$),
+consistent with the large, slow signal eye movements produce. Identifying the EMG-related
+component from the plot alone is less clear, since the original EMG channel is small and
+largely featureless over this particular epoch. Of the remaining three, component 1 shows the
+most irregular, high-frequency fluctuation, closer to what broadband muscle activity looks like
+than the smoother, slower content of components 0 and 3, which makes it the more likely EMG
+candidate from visual inspection.
+
+\textbf{Q: Discuss the effect of including vs excluding EOG/EMG channels from ICA input.}
+Including EOG and EMG as explicit channels gives the ICA input direct access to the artefact
+sources themselves, so eye-movement and muscle activity are much more likely to end up isolated
+into their own independent components, components that can then be zeroed out and the mixing
+inverted to recover cleaner EEG. Excluding EOG/EMG would remove that direct signal and leave ICA
+to separate the same artefacts purely from how they leak into the two EEG channels, a weaker and
+less reliable separation.
+
+\paragraph{Automatic ICA component elimination.} \texttt{identify\_artifact\_components} takes
+the maximum-absolute-correlation rule as its deterministic selection rule, since ICA's whitened
+components have an arbitrary sign, so only the strength of the association with EOG or EMG is
+meaningful, not its direction. The correlation is recomputed separately for every subject rather
+than fixing one global component index, so the rule keeps working even though the same fitted
+unmixing matrix is applied to all twenty subjects. Exactly one component is zeroed for EOG and
+one for EMG, which matches the four-channel mixture the model was fit on (two EEG channels plus
+the two reference channels): removing the two artefact components leaves exactly two components
+behind, and \texttt{denoise\_subject\_with\_ica} returns the first two channels of the
+reconstructed signal, Fpz-Cz and Pz-Oz, in the channel order used throughout.
+
+\textbf{Q: Visualise the signal before and after applying ICA, with the original and de-mixed
+signal overlaid on the same axes for each channel.} Figure~\ref{fig:icabeforeafter} shows
+subject 6, epoch 5 (the same example used above) before and after the two identified components
+are removed, Fpz-Cz on top and Pz-Oz below. In both channels the large, slow deflections visible
+in the original signal are strongly attenuated in the denoised trace, leaving a much smaller,
+comparatively flat signal, consistent with the identified EOG/EMG components carrying most of
+that large-amplitude activity.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{p2_ica_before_after.pdf}
+  \caption{Fpz-Cz and Pz-Oz, subject 6, epoch 5, before and after removing the identified
+           EOG/EMG components.}
+  \label{fig:icabeforeafter}
+\end{figure}
+
+\subsubsection{Signal filtering}
+
+The goal here was to design and apply a filter that preserves the EEG spectral content relevant
+for sleep staging while removing slow drifts and high-frequency noise. \texttt{bandpass\_filter}
+is a 4th-order Butterworth bandpass, \SIrange{0.5}{30}{\hertz}, built with
+\texttt{scipy.signal.butter(..., output="sos")} and applied with \texttt{sosfiltfilt}. The
+passband edges are not arbitrary: \SI{0.5}{\hertz} and \SI{30}{\hertz} are exactly the lower
+edge of the delta band and the upper edge of the beta band in the \texttt{BANDS} dictionary used
+later for feature extraction, so the filter keeps everything the band-power features are
+computed from and removes only what sits outside it, the slow drift below \SI{0.5}{\hertz} and
+high-frequency noise and residual EMG activity above \SI{30}{\hertz}. The second-order-sections
+form together with \texttt{sosfiltfilt} is used instead of a direct transfer-function
+implementation for numerical stability at this filter order, and \texttt{sosfiltfilt} filters
+forward and backward so the result has zero phase, which avoids shifting the timing of EEG
+waveforms such as the spindles and K-complexes discussed around Figure~\ref{fig:epochn2}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{p2_filter_time.pdf}
+  \caption{Subject 6, epoch 5, Fpz-Cz: raw, ICA-denoised, and denoised-and-filtered signal.}
+  \label{fig:filtertime}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.80\textwidth]{p2_filter_psd.pdf}
+  \caption{Welch PSD of the same epoch before and after filtering.}
+  \label{fig:filterpsd}
+\end{figure}
+
+Figure~\ref{fig:filtertime} shows that most of the large-amplitude activity is already removed
+by ICA denoising, and filtering flattens the signal further into a smaller, smoother trace with
+the remaining slow wandering gone. Figure~\ref{fig:filterpsd} confirms this in the frequency
+domain: the two curves track each other closely inside the passband, then the filtered curve
+falls away sharply above \SI{30}{\hertz}, several orders of magnitude below the unfiltered
+curve by \SI{50}{\hertz}, exactly the attenuation the low-pass edge is designed to produce.
+
+\textbf{Q: Should you filter before or after ICA artefact removal?} ICA should run first, on the
+unfiltered signal. ICA assumes the four channels are linear mixtures of the same underlying
+sources, and filtering the signal beforehand would distort that mixing; eye blinks and muscle
+bursts spread their energy across a wide range of frequencies, so removing part of that range
+before ICA runs would take away exactly the information it needs to isolate them as separate
+components. The bandpass filter is applied afterwards, to the already denoised signal.
+
+\subsubsection{Feature extraction}
+
+Here the goal was to extract a compact set of spectral features from each epoch, suitable for
+supervised sleep staging.
+
+\texttt{extract\_psd\_features} computes, for each EEG channel (Fpz-Cz and Pz-Oz) and every
+epoch of a subject, the Welch periodogram of the \uV-scaled, ICA-denoised signal
+(\texttt{fs=100}, \texttt{nperseg=300}, \SI{3}{\second} segments, a frequency resolution of
+about \SI{0.33}{\hertz}), and converts the resulting power to decibels with
+\texttt{10*np.log10(Pxx + 1e-12)}, the small additive constant keeping the logarithm defined
+where the estimated power is essentially zero. The dB scale compresses the wide dynamic range of
+EEG power, large near \SI{0}{\hertz} and decaying with frequency as Figure~\ref{fig:filterpsd}
+already showed, into a scale where proportional differences across the spectrum are easier to
+compare. For each subject the function returns one (n\_epochs, n\_freq\_bins) array per channel
+and the shared frequency vector (151 bins for \texttt{nperseg=300}, up to the \SI{50}{\hertz}
+Nyquist frequency); stacking this over all twenty subjects gives \texttt{PSD\_all}.
+
+As the bonus feature, \texttt{extract\_bandpower} reuses the same Welch PSD but integrates it,
+with the trapezoidal rule, over each of the five canonical bands already defined in
+\texttt{BANDS} (delta through beta), for the same two EEG channels, giving ten raw-power
+features (\uV$^2$, not dB) per epoch, stacked over subjects into \texttt{BANDPOWER\_all}. As
+the notebook's own answer explains, this bandpower summary is a compact, physiologically
+meaningful representation of an epoch, since it reflects known per-stage characteristics
+directly, such as the increased delta power expected in N3.
+
+%Printing the type, length and one example value of each confirms both feature sets have the
+%shape they are meant to: \texttt{PSD\_all} and \texttt{BANDPOWER\_all} are both length-20 lists,
+%one entry per subject, and the two sample values, \num{10.928545} (dB: subject 0, channel 0,
+%epoch 0, first frequency bin) and \num{265.7956918080648} (\uV$^2$: subject 0, epoch 0, first
+%band-power feature, the delta band on channel 0), sit on the scale each function is meant to
+%produce, dB for the PSD and raw power for the bandpower.
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{p2_psd_features.pdf}
+  \caption{Mean Fpz-Cz PSD (dB) per sleep stage, subjects 1 and 2, using the provided
+           \texttt{plot\_subjects\_features} helper.}
+  \label{fig:psdfeatures}
+\end{figure}
+
+Figure~\ref{fig:psdfeatures} shows the five stages separating most clearly in the low-frequency
+delta/theta range, and a distinct bump inside the sigma band for some stages, consistent with
+sleep-spindle activity concentrated in that band.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{p2_bandpower_box.pdf}
+  \caption{Relative bandpower per sleep stage, subject 6, Fpz-Cz.}
+  \label{fig:bandpowerbox}
+\end{figure}
+
+For the box-plot summary of the bonus feature, each epoch's ten raw bandpower values are first
+normalised to relative power, before being grouped by band and
+stage. Figure~\ref{fig:bandpowerbox} shows delta carrying most of the relative power in every
+stage, highest in N3 and lowest in N1, while the other four bands stay comparatively small and
+similar in size across stages, matching the delta-power characteristic the bandpower feature was
+added to capture.
+
+\textbf{Q: Is high/low/bandpass filtering needed if we remove the reduced frequencies afterwards
+during feature extraction? Why (not)?} Yes, filtering is still necessary. Although PSD-based
+feature extraction focuses on specific frequency bands, an unfiltered signal still contains slow
+drifts and high-frequency noise that can leak into the estimated spectrum through windowing
+effects and the finite resolution of the Fourier transform. Band-pass filtering before PSD
+computation improves numerical stability, reduces spectral leakage, and makes the extracted
+features more accurately represent physiological EEG activity.
+
+\textbf{Q: Should other channels (EOG and/or EMG) be taken into consideration?} No: as
+implemented, only the two EEG channels are used. Including EOG or EMG directly as staging features risks reintroducing the same
+artefacts the ICA step was meant to remove from the EEG-based representation.
+
+%-----------------------------------------------------------------------
+\subsection{ML deployment}
+%-----------------------------------------------------------------------
+
+This section deploys a single classifier for sleep staging, chosen by a leave-one-subject-out
+(LOSO) cross-validation over the training subjects, and evaluated on the five held-out test
+subjects.
+
+\subsubsection{Scoring, classifiers and CV split}
+
+\textbf{Scoring.} Since this is a multi-class problem with imbalanced sleep stages, three
+metrics are tracked: accuracy, the overall proportion of correctly classified epochs; F1-macro,
+the F1-score averaged across the five stages unweighted, so rare stages such as N1 are not
+drowned out; and F1-weighted, the F1-score averaged with each stage weighted by its true
+frequency. Accuracy alone can be misleading here, since stages such as N2 are far more common
+than N1, so F1-macro and F1-weighted give two complementary views alongside it.
+
+%In the code
+%these are computed by hand inside \texttt{evaluate\_loso} (\texttt{accuracy\_score} and
+%\texttt{f1\_score} with \texttt{average="macro"}/\texttt{"weighted"}), one call per fold, then
+%averaged; the \texttt{scoring} dictionary earlier in the notebook mirrors the same three names
+%but is not itself wired into a scikit-learn CV utility, it documents the choice rather than
+%computing it.
+
+\textbf{Preprocessing configurations.} Six configurations are compared, listed in
+Table~\ref{tab:preprocconfig}, covering the full range: no reduction at
+all, two manual reductions (integrating or averaging the PSD into per-band values), and
+automatic reduction with PCA at three component counts. Every configuration scales its features
+with \texttt{StandardScaler} first, including the tree-based models, for consistency across the
+comparison.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Preprocessing configurations compared in the LOSO grid.}
+  \label{tab:preprocconfig}
+  \begin{tabular}{lllc}
+    \toprule
+    Configuration & Feature source & Reduction & Dim. \\
+    \midrule
+    \texttt{psd\_scaler} & PSD (Fpz-Cz), dB & none (scaling only) & 151 \\
+    \texttt{bandpower\_scaler} & Bandpower, both channels & manual: trapz power per band & 10 \\
+    \texttt{psd\_bandavg\_scaler} & PSD (Fpz-Cz), dB & manual: mean PSD per band & 5 \\
+    \texttt{psd\_pca10} & PSD (Fpz-Cz), dB & automatic: PCA & 10 \\
+    \texttt{psd\_pca20} & PSD (Fpz-Cz), dB & automatic: PCA & 20 \\
+    \texttt{psd\_pca30} & PSD (Fpz-Cz), dB & automatic: PCA & 30 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%\texttt{bandpower\_scaler} and \texttt{psd\_bandavg\_scaler} are not the same reduction:
+%\texttt{bandpower\_scaler} uses \texttt{BANDPOWER\_all}, the trapezoidal integral of the PSD
+%over each band for both EEG channels (10 features), while \texttt{psd\_bandavg\_scaler} uses
+%\texttt{PSD\_BANDAVG\_all}, the plain mean of the dB-scale PSD within each band for Fpz-Cz only
+%(5 features); the pair together covers the ``averaging the EEG bands'' manual case the
+%assignment asks to compare against PCA.
+
+\textbf{Classifiers.} Five classifiers are compared, each swept over the hyperparameter grid in
+Table~\ref{tab:classifiers}: \num{28} hyperparameter settings in total, each evaluated under all
+6 preprocessing configurations, for \num{168} pipelines evaluated over the LOSO split.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Classifiers and the hyperparameter grid swept for each.}
+  \label{tab:classifiers}
+  \begin{tabular}{llc}
+    \toprule
+    Classifier & Hyperparameters swept & Settings \\
+    \midrule
+    $K$-nearest neighbours & $n\_neighbors \in \{3,5,7,9\}$ & 4 \\
+    Logistic regression & $C \in \{0.1, 1.0, 10.0\}$, \texttt{max\_iter}=1000 & 3 \\
+    Decision tree & $max\_depth \in \{$None$,10,20\} \times min\_samples\_split \in \{2,5,10\}$ & 9 \\
+    Random forest & $n\_estimators \in \{100,200\} \times max\_depth \in \{$None$,10,20\}$ & 6 \\
+    SVM (RBF kernel) & $C \in \{0.5,1.0,2.0\} \times gamma \in \{$scale$,0.01\}$ & 6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{LOSO split.} \texttt{build\_feature\_matrix} stacks the epochs of a given list of
+subjects into one feature matrix and simultaneously builds a \texttt{groups} array that repeats
+each subject's ID once per epoch, so every row of the feature matrix carries the ID of the
+subject it came from. \texttt{loso\_split\_manual} then loops over the unique subject IDs in
+\texttt{groups} and, for each one, yields it as the validation fold (\texttt{groups == subj})
+and every other subject as the training fold (\texttt{groups != subj}), which is exactly
+leave-one-subject-out: each fold's validation set is a single, whole subject, and no subject's
+epochs are ever split across training and validation within a fold. Only the fifteen training
+subjects go into this loop, since \texttt{X\_psd\_train}, \texttt{X\_bp\_train}, and
+\texttt{X\_psd\_bandavg\_train} are all built from \texttt{SUBJECTS\_TRAIN}; the five test
+subjects are only turned into feature matrices later, after a classifier has already been
+selected, so they never take part in cross-validation.
+
+\subsubsection{Cross-validation and visualisation of results}
+
+Each of the \num{168} pipelines from Table~\ref{tab:preprocconfig} and Table~\ref{tab:classifiers}
+is passed once to \texttt{evaluate\_loso}, which runs the 15-fold LOSO split and returns the mean
+and standard deviation of accuracy, F1-macro and F1-weighted across those folds. The deliverable
+suggests scikit-learn's \texttt{cross\_validate}, but the notebook uses this hand-written
+function instead, since the subject-grouped folds and the three custom metrics are easiest to
+control directly with \texttt{loso\_split\_manual}.
+
+\textbf{Q: Which is the best model? Why?} \texttt{cv\_df["f1\_macro\_mean"].idxmax()} selects
+\texttt{psd\_scaler} (the full 151-bin PSD, scaled, no dimensionality reduction) with an
+RBF-kernel SVM, $C=1.0$, $\gamma=$~scale, F1-macro $0.678$. F1-macro is the criterion because
+sleep staging is multi-class and imbalanced, and it is the one of the three tracked metrics that
+weights every stage equally, so a model cannot win by being good only at the frequent stages.
+Among the configurations compared, PSD features are the highest-dimensional input, and SVM suits
+that best: it looks for the maximum-margin boundary rather than relying on local distances or
+axis-aligned splits, which is why $K$NN and the tree-based models score visibly lower on the
+same features.
+
+\subsubsection{Deploying and testing the best model}
+
+
+The winning pipeline is rebuilt from fresh, unfitted steps and fit once on all fifteen training subjects combined, rather than reusing any single LOSO-fold model, since cross-validation is only used to pick the configuration. The confusion matrix uses \texttt{normalize="true"}, so each row sums to one and shows how a true stage's epochs were distributed across predictions, which matters given how unevenly sized the test stages are, from 264 epochs for N1 up to 2351 for N2.
+
+
+\textbf{Q: Are your results in line with your expectations?} Yes. The model achieves strong
+performance on the dominant, well-defined stages, N2, N3 and Wake, while it struggles with N1,
+which is known to be difficult to predict since it lacks distinctive, easily characterised
+patterns; the notebook's classification report shows this plainly, N1's recall is only $0.034$
+against $0.812$--$0.853$ for the other stages, and its confusion matrix shows most of N1's
+epochs predicted as REM or Wake instead. The generalisation gap between the LOSO cross-validation
+score (F1-macro $0.678$) and the held-out test score (F1-macro $0.610$) is moderate and expected
+for subject-independent sleep staging with classical ML models.
+
+\textbf{Q: Can anything be done to improve the model?} Yes. Performance could improve by
+incorporating features from the EOG and EMG channels, which carry physiological information
+directly relevant to staging; including them could help the model separate stages that look
+similar in the EEG alone, particularly N1. Class-balanced learning would force the model to
+weight rare classes more, which should improve recall for underrepresented stages such as N1.
+Temporal smoothing across consecutive epochs, using the predictions of neighbouring epochs to
+correct isolated misclassifications, could produce more physiologically meaningful staging.
+Sequence-based models such as hidden Markov models could also help by learning typical sleep
+stage transitions directly and using that temporal context in the prediction, which should
+improve both accuracy and consistency.
 
 \end{document}
