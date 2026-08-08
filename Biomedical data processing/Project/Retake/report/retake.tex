@@ -64,14 +64,10 @@
 \section{Part I: ECG-based identification}
 %=======================================================================
 
-The aim of this part is to recover, without supervision, which of five subjects produced each
-heartbeat in a single continuous ECG recording. The pipeline has six stages: R-peak detection
-with Pan-Tompkins, Wiener filtering (a PQRST model as the desired signal, the inter-beat
-intervals as the noise), segmentation into one-beat windows, wavelet decomposition, $K$-means
-clustering into five groups, and PCA followed by re-clustering to measure the cost of the
-compression. The ground-truth labels are never used inside this chain, only to score the
-finished partition, and since $K$-means numbers its clusters arbitrarily, the labelling is
-resolved afterwards by searching over all permutations of the five indices.
+This part unsupervisedly recovers which of five subjects produced each heartbeat in a single ECG
+recording, through six stages, Pan-Tompkins R-peak detection, Wiener filtering (PQRST signal,
+inter-beat noise), one-beat segmentation, wavelet decomposition, $K$-means clustering, and PCA
+with re-clustering, scored against the ground truth afterwards via permutation matching.
 
 %-----------------------------------------------------------------------
 \subsection{Data exploration}
@@ -140,9 +136,9 @@ subject and does not have the shape of a PQRST complex.
 \subsection{Wiener filter}
 \label{sec:wiener}
 
-The recording is cleaned with a Wiener filter built from an averaged PQRST complex as the
-desired signal and the concatenated inter-beat intervals as the noise, then applied to the
-whole record with weighted overlap-add filtering.
+The recording is cleaned with a Wiener filter, an averaged PQRST complex as the desired signal
+and the concatenated inter-beat intervals as the noise, applied with weighted overlap-add
+filtering.
 
 \subsubsection{Template estimation}
 
@@ -151,18 +147,16 @@ R-peaks are located with the Pan-Tompkins algorithm. The signal is band-pass fil
 differentiated with a five-point derivative, squared, and integrated with a
 \SI{150}{\milli\second} moving window; peaks are then picked on this integrated signal.
 
-\textbf{Design choices.} The assignment does not specify how to pick the peaks once the signal
-is integrated, so two parameters had to be chosen. The threshold is set to exactly the mean of
-the integrated signal (a factor of 1), which makes it a data-driven choice rather than a fixed
-value picked by hand: between beats the integrated signal reflects only noise and stays close to
-its own average, while a QRS complex produces a burst of energy well above that average, so
-thresholding at the mean separates the two without needing a value tuned to this particular
-recording's amplitude scale. The minimum spacing enforced between accepted peaks is set to
-\SI{250}{\milli\second}, a \SI{240}{bpm} ceiling, as noted in the code comment next to it. This
-sits safely above any physiologically realistic heart rate, so it can never suppress two
-genuinely consecutive beats, while still being wide enough to span the \SI{150}{\milli\second}
-moving-window integration, which is what stops the integrated bump from a single beat from being
-picked up as two separate peaks.
+\textbf{Design choices.} The assignment does not specify how to pick peaks once the signal is
+integrated; the threshold is the one parameter actually chosen here, set to exactly the mean of
+the integrated signal (a factor of 1) rather than a hand-picked value: between beats the
+integrated signal reflects only noise and stays close to its own average, while a QRS complex
+produces a burst of energy well above it, so thresholding at the mean separates the two without
+tuning to this recording's amplitude scale. The \SI{250}{\milli\second} minimum spacing between
+accepted peaks (a \SI{240}{bpm} ceiling) is already fixed in the code; it is safe because it
+sits above any physiologically realistic heart rate while still spanning the
+\SI{150}{\milli\second} integration window, which is what stops one beat's bump from being
+picked up as two peaks.
 
 \subsubsection{Creating and applying the Wiener filter}
 
@@ -259,29 +253,20 @@ signal.
 about the mean of the noise segments?} Yes, in both cases. The mean of the template carries no information about its
 shape and would otherwise appear as a large DC component in $S_d$ that has nothing to do with
 ECG morphology; Wiener theory also assumes zero-mean noise, so a leftover offset in the noise
-segments would inflate $S_n(0)$ for reasons unrelated to the actual noise process. The effect is
-directly visible in this recording: demeaning forces $S_d(0)=0$ while $S_n(0)$ stays large
-because of the baseline wander identified earlier, which is exactly why the filter rejects
-\SI{0}{\hertz} almost completely.
+segments would inflate $S_n(0)$ for reasons unrelated to the actual noise process. This is
+visible directly in Figure~\ref{fig:wienerpsd}, discussed above.
 
-\textbf{Q: Which method and parameters did you choose to estimate the PSDs? Why?} $S_n$ is
-estimated with Welch's method (Hann window, segment length $L=\num{512}$, \SI{50}{\percent}
-overlap), because the noise record is long (about \SI{130}{\second}) and stationary, and
-averaging over overlapping segments is what reduces the variance of the estimate; a single
-periodogram of a random signal has a relative standard deviation of about \SI{100}{\percent}
-regardless of record length. $S_d$ is estimated differently, as the periodogram of the
-zero-padded template rather than with Welch, since $d$ is a single deterministic transient
-rather than a stationary process and averaging sub-windows of it would
-broaden its spectrum instead of resolving it.
+\textbf{Q: Which method and parameters did you choose to estimate the PSDs? Why?} As described
+in Section~1.2.2: Welch (Hann window, $L=\num{512}$, \SI{50}{\percent} overlap) for $S_n$, since
+averaging over segments is what reduces variance for the long, stationary noise record; the
+periodogram of the zero-padded template for $S_d$, since $d$ is a single deterministic transient
+that Welch's sub-window averaging would only blur.
 
-\textbf{Q: Do you see any edge effects after filtering? Why (not)?}
-A small edge effect can be observed at the very beginning and end of the recording, which is expected due to boundary effects introduced by the filtering process.
-The \texttt{wola\_filt} function reconstructs the
-filtered signal from overlapping analysis windows and explicitly zero-pads the result whenever
-the reconstruction falls short of the input length; the first and last windows also lack a
-neighbour to overlap with on one side. Both are boundary artefacts of the overlap-add procedure
-itself, rather than of the Wiener filter's frequency response, and are the most likely
-explanation for why the filtered signal yields three fewer detected R-peaks than the raw one.
+\textbf{Q: Do you see any edge effects after filtering? Why (not)?} A small one, at the very
+beginning and end of the recording: as explained above, \texttt{wola\_filt}'s first and last
+windows have no neighbour to overlap with and the reconstruction is zero-padded there, boundary
+artefacts of the overlap-add procedure rather than of the filter's frequency response, and the
+likely cause of the three fewer R-peaks detected after filtering.
 
 %=======================================================================
 \subsection{Segmentation}
@@ -447,16 +432,13 @@ indices and keeps whichever relabelling maximises agreement with the ground trut
 what makes the accuracy and confusion matrix above meaningful.
 
 \textbf{Q: Is it a good idea to normalise the wavelets before classification? Why (not)?} Yes,
-as a general rule, since $K$-means clusters purely by Euclidean distance, a coefficient with a
-larger numerical range would automatically carry more weight in that distance than a more
-informative coefficient on a smaller scale.
+for the reason given above: an unnormalised coefficient's larger numerical range would dominate
+the Euclidean distance $K$-means uses, regardless of how informative it actually is.
 
 \textbf{Q: How do you decide which wavelet values are the most relevant to model the ECG
-segments? Why?} As in Section~1.4, relevance is measured as variance across the \num{676}
-segments after discarding near-constant coefficients, and the two coefficients kept here are
-the same highest-variance pair found there, \texttt{cA5[8]} and \texttt{cA5[10]}, both from the
-coarsest approximation band, since that is the scale at which the subjects differ most in
-overall shape and amplitude.
+segments? Why?} As in Section~1.4: variance across the \num{676} segments after discarding
+near-constant coefficients, giving the same pair, \texttt{cA5[8]} and \texttt{cA5[10]}, from the
+coarsest band where the subjects differ most.
 
 %=======================================================================
 \subsection{Dimensionality reduction}
@@ -534,19 +516,17 @@ that ordering rather than preserving it.
 \section{Part II: EEG-based sleep staging}
 %=======================================================================
 
-This part classifies \SI{30}{\second} epochs of a polysomnography (PSG) recording into one of
-five sleep stages (Wake, N1, N2, N3, REM) from four channels: two EEG derivations (Fpz-Cz,
-Pz-Oz), an EOG reference and an EMG reference. Twenty subjects are provided, split into fifteen
-for training and five held out for testing, and each subject's recording is already cut into
-consecutive \num{3000}-sample epochs (\SI{100}{\hertz} for \SI{30}{\second}) with one
-ground-truth stage label per epoch.
+This part classifies \SI{30}{\second} PSG epochs into one of five sleep stages (Wake, N1, N2,
+N3, REM) from four channels (Fpz-Cz, Pz-Oz, EOG, EMG), across twenty subjects split into fifteen
+for training and five for testing, each already cut into \num{3000}-sample
+(\SI{100}{\hertz}$\times$\SI{30}{\second}) epochs with one ground-truth stage label per epoch.
 
 %-----------------------------------------------------------------------
 \subsection{Data preparation}
 %-----------------------------------------------------------------------
 
-This first subsection groups the tasks that come before any feature is extracted: loading the
-recordings, visualising a single epoch, and removing EOG/EMG artefacts with ICA.
+This subsection covers the tasks before any feature is extracted: loading the recordings,
+visualising a single epoch, and removing EOG/EMG artefacts with ICA.
 
 \subsubsection{Visualising a single epoch}
 
@@ -649,7 +629,7 @@ inverted to recover cleaner EEG. Excluding EOG/EMG would remove that direct sign
 to separate the same artefacts purely from how they leak into the two EEG channels, a weaker and
 less reliable separation.
 
-\paragraph{Automatic ICA component elimination.} \texttt{identify\_artifact\_components} takes
+\paragraph{Automatic ICA component elimination.} The \texttt{identify\_artifact\_components} function takes
 the maximum-absolute-correlation rule as its deterministic selection rule, since ICA's whitened
 components have an arbitrary sign, so only the strength of the association with EOG or EMG is
 meaningful, not its direction. The correlation is recomputed separately for every subject rather
@@ -737,6 +717,14 @@ compare. For each subject the function returns one (n\_epochs, n\_freq\_bins) ar
 and the shared frequency vector (151 bins for \texttt{nperseg=300}, up to the \SI{50}{\hertz}
 Nyquist frequency); stacking this over all twenty subjects gives \texttt{PSD\_all}.
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{p2_psd_features.pdf}
+  \caption{Mean Fpz-Cz PSD (dB) per sleep stage, subjects 1 and 2, using the provided
+           \texttt{plot\_subjects\_features} helper.}
+  \label{fig:psdfeatures}
+\end{figure}
+
 As the bonus feature, \texttt{extract\_bandpower} reuses the same Welch PSD but integrates it,
 with the trapezoidal rule, over each of the five canonical bands already defined in
 \texttt{BANDS} (delta through beta), for the same two EEG channels, giving ten raw-power
@@ -752,14 +740,6 @@ directly, such as the increased delta power expected in N3.
 %band-power feature, the delta band on channel 0), sit on the scale each function is meant to
 %produce, dB for the PSD and raw power for the bandpower.
 
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.95\textwidth]{p2_psd_features.pdf}
-  \caption{Mean Fpz-Cz PSD (dB) per sleep stage, subjects 1 and 2, using the provided
-           \texttt{plot\_subjects\_features} helper.}
-  \label{fig:psdfeatures}
-\end{figure}
 
 Figure~\ref{fig:psdfeatures} shows the five stages separating most clearly in the low-frequency
 delta/theta range, and a distinct bump inside the sigma band for some stages, consistent with
@@ -795,9 +775,8 @@ artefacts the ICA step was meant to remove from the EEG-based representation.
 \subsection{ML deployment}
 %-----------------------------------------------------------------------
 
-This section deploys a single classifier for sleep staging, chosen by a leave-one-subject-out
-(LOSO) cross-validation over the training subjects, and evaluated on the five held-out test
-subjects.
+This section deploys a single classifier, selected by leave-one-subject-out (LOSO)
+cross-validation on the training subjects and evaluated on the five held-out test subjects.
 
 \subsubsection{Scoring, classifiers and CV split}
 
